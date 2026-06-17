@@ -36,6 +36,9 @@ export function dropChat(id: string) {
   try {
     fs.unlinkSync(path.join(DATA_DIR, 'chat', id + '.jsonl'));
   } catch {}
+  try {
+    fs.rmSync(path.join(DATA_DIR, 'chat', 'uploads', id), { recursive: true, force: true });
+  } catch {}
 }
 
 export function stopAllChats() {
@@ -126,7 +129,7 @@ export class ChatSession {
     });
   }
 
-  send(text: string): { ok: boolean; error?: string } {
+  send(text: string, images: { path: string; url: string }[] = []): { ok: boolean; error?: string } {
     if (this.running) return { ok: false, error: 'a turn is already running' };
     const meta = getMeta(this.id);
     if (!meta) return { ok: false, error: 'no such session' };
@@ -135,11 +138,23 @@ export class ChatSession {
     meta.updatedAt = Date.now();
     // first task names the thread (Codex-style) when the title is still the project default
     if (meta.title === path.basename(meta.cwd) && this.events.every((e) => e.type !== 'user')) {
-      meta.title = text.replace(/\s+/g, ' ').trim().slice(0, 48);
+      const trimmed = text.replace(/\s+/g, ' ').trim();
+      meta.title = (trimmed || (images.length ? `${images.length} image${images.length > 1 ? 's' : ''}` : '')).slice(0, 48);
       sessions.save();
     }
-    this.emit({ type: 'user', text });
+    this.emit({ type: 'user', text, images: images.length ? images.map((i) => i.url) : undefined });
     this.emit({ type: 'status', running: true });
+
+    // Claude Code reads images off disk: reference the saved paths in the prompt
+    // and tell it to view them with the Read tool (which renders images).
+    let prompt = text;
+    if (images.length) {
+      const paths = images.map((i) => i.path.replace(/\\/g, '/')).join('\n');
+      const noun = images.length > 1 ? 'images' : 'an image';
+      prompt =
+        (text ? text + '\n\n' : '') +
+        `[The user attached ${noun}. View ${images.length > 1 ? 'each one' : 'it'} with the Read tool before responding:\n${paths}]`;
+    }
 
     const args = [
       '-p',
@@ -149,6 +164,13 @@ export class ChatSession {
       '--include-partial-messages',
       '--permission-mode',
       meta.permissionMode || DEFAULT_PERMISSION_MODE,
+      // Each turn is a one-shot headless process with stdin closed, so the
+      // interactive AskUserQuestion tool can't be answered — Claude Code would
+      // silently auto-skip it. Disabling it makes Claude ask clarifying
+      // questions as plain text instead; the turn ends and the user answers in
+      // their next message (which resumes the session).
+      '--disallowedTools',
+      'AskUserQuestion',
     ];
     if (meta.claudeSessionId) args.push('--resume', meta.claudeSessionId);
 
@@ -211,7 +233,7 @@ export class ChatSession {
     // without an error listener that's an uncaughtException taking the server down
     p.stdin.on('error', () => {});
     try {
-      p.stdin.write(text);
+      p.stdin.write(prompt);
       p.stdin.end();
     } catch {}
     return { ok: true };

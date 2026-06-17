@@ -55,6 +55,13 @@ const PATHS: Record<string, React.ReactNode> = {
       <circle cx="12" cy="12" r="2.8" />
     </>
   ),
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.6" />
+      <path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" />
+    </>
+  ),
 };
 
 export default function Icon({

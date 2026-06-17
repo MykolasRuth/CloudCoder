@@ -4,7 +4,7 @@
 import type { ChangedFile } from '../git.js';
 
 export type ChatEvent =
-  | { type: 'user'; text: string }
+  | { type: 'user'; text: string; images?: string[] }
   | { type: 'changes'; files: ChangedFile[] }
   | { type: 'init'; claudeSessionId: string; model: string }
   | { type: 'text_delta'; text: string }

@@ -71,11 +71,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title }),
     }).then((r) => j(r)),
-  chatSend: (id: string, text: string) =>
+  chatSend: (id: string, text: string, images?: string[]) =>
     fetch(`/_cc/api/chat/${id}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, images }),
     }).then((r) => j(r)),
   chatStop: (id: string) => fetch(`/_cc/api/chat/${id}/stop`, { method: 'POST' }).then((r) => j(r)),
   gitStatus: (cwd: string) =>

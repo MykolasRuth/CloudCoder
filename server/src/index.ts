@@ -18,7 +18,7 @@ import { stopAllChats } from './chat/chatRunner.js';
 initPush();
 
 const app = express();
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: '40mb' })); // chat image attachments arrive as base64
 app.use(authMiddleware);
 
 // All CloudCoder API/WS/assets live under /_cc/ so previewed dev servers can
