@@ -183,7 +183,7 @@ export default function App() {
             {s.kind === 'terminal' ? (
               <TermView session={s} active={s.id === activeId && !panel} />
             ) : (
-              <ChatView session={s} />
+              <ChatView session={s} active={s.id === activeId} />
             )}
           </div>
         ))}

@@ -48,7 +48,7 @@ type Item =
   | { kind: 'result'; ok: boolean; cost: number; turns: number; durationMs: number }
   | { kind: 'error'; message: string };
 
-export default function ChatView({ session }: { session: SessionMeta }) {
+export default function ChatView({ session, active }: { session: SessionMeta; active: boolean }) {
   const [items, setItems] = useState<Item[]>([]);
   const [draftText, setDraftText] = useState('');
   const [running, setRunning] = useState(false);
@@ -156,6 +156,21 @@ export default function ChatView({ session }: { session: SessionMeta }) {
     const el = scrollRef.current;
     if (el && stickBottom.current) el.scrollTop = el.scrollHeight;
   }, [items, draftText]);
+
+  // Sessions stay mounted but hidden (display:none), so the pin-to-bottom above
+  // runs while this view has no layout and can't actually scroll. When the
+  // session becomes visible, jump to where the conversation left off (latest).
+  useEffect(() => {
+    if (!active) return;
+    stickBottom.current = true;
+    const el = scrollRef.current;
+    if (!el) return;
+    // wait for layout after display flips to block
+    const raf = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
 
   const addFiles = async (files: FileList | File[] | null) => {
     if (!files) return;
