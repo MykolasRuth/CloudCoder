@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Icon from '../Icon';
+import { api } from '../../lib/api';
+
+const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
 
 export interface ToolItem {
   kind: 'tool';
@@ -26,9 +29,19 @@ const TOOL_ICONS: Record<string, string> = {
   TodoWrite: 'check',
 };
 
-export default function ToolCard({ tool }: { tool: ToolItem }) {
+export default function ToolCard({ tool, cwd }: { tool: ToolItem; cwd: string }) {
   const [open, setOpen] = useState(false);
   const icon = TOOL_ICONS[tool.name] || (/web|fetch/i.test(tool.name) ? 'external' : 'gear');
+
+  // When Claude Reads an image file, show the picture itself in the expanded card.
+  const imageUrl = useMemo(() => {
+    if (tool.name !== 'Read') return null;
+    try {
+      const fp = JSON.parse(tool.input)?.file_path;
+      if (typeof fp === 'string' && IMAGE_RE.test(fp)) return api.fileRawUrl(cwd, fp);
+    } catch {}
+    return null;
+  }, [tool.name, tool.input, cwd]);
   return (
     <div className="my-1 overflow-hidden rounded-xl border border-linesoft bg-raised">
       <button className="flex w-full items-center gap-2.5 px-3 py-2 text-left" onClick={() => setOpen(!open)}>
@@ -40,6 +53,15 @@ export default function ToolCard({ tool }: { tool: ToolItem }) {
       </button>
       {open && (
         <div className="border-t border-linesoft px-3 py-2.5">
+          {imageUrl && (
+            <a href={imageUrl} target="_blank" rel="noreferrer">
+              <img
+                src={imageUrl}
+                className="mb-2 max-h-72 w-auto rounded-lg border border-line"
+                onError={(e) => ((e.currentTarget.style.display = 'none'))}
+              />
+            </a>
+          )}
           <pre className="mono max-h-48 overflow-auto whitespace-pre-wrap text-[10.5px] leading-relaxed text-faint">{tool.input}</pre>
           {tool.output != null && tool.output !== '' && (
             <>

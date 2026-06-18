@@ -14,6 +14,7 @@ export interface SessionMeta {
   title: string;
   program?: TermProgram;
   permissionMode?: string;
+  model?: string;
   claudeSessionId?: string;
   createdAt: number;
   updatedAt?: number;
@@ -40,6 +41,18 @@ export function getPty(id: string): PtySession | undefined {
 
 export const PERMISSION_MODES = ['acceptEdits', 'bypassPermissions', 'plan', 'default'] as const;
 export const DEFAULT_PERMISSION_MODE = 'acceptEdits';
+
+// 'default' means "don't pass --model" (use the CLI/account default); the rest
+// are exact Claude model IDs passed straight to `claude --model`.
+export const MODELS = [
+  'default',
+  'claude-opus-4-8',
+  'claude-opus-4-7',
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
+  'claude-fable-5',
+] as const;
 
 export function validateCwd(cwd: string): string | null {
   const resolved = resolveWithin(PROJECTS_ROOT, cwd);

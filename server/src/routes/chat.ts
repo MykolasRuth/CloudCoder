@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { getChat } from '../chat/chatRunner.js';
+import { getMeta } from '../pty/registry.js';
 import { DATA_DIR } from '../config.js';
 
 export const chatRouter = Router();
@@ -39,6 +41,83 @@ function saveImages(id: string, raw: unknown): { path: string; url: string }[] {
   }
   return out;
 }
+
+// --- slash-command discovery (skills + custom commands, user + project) ---
+interface Command {
+  name: string;
+  description: string;
+  kind: 'skill' | 'command';
+}
+
+function frontmatter(text: string): Record<string, string> {
+  const m = /^---\s*\n([\s\S]*?)\n---/.exec(text);
+  const fm: Record<string, string> = {};
+  if (!m) return fm;
+  for (const line of m[1].split('\n')) {
+    const kv = /^([A-Za-z0-9_-]+):\s*(.+)$/.exec(line.trim());
+    if (kv) fm[kv[1].toLowerCase()] = kv[2].trim();
+  }
+  return fm;
+}
+
+function readSkills(baseDir: string): Command[] {
+  const dir = path.join(baseDir, '.claude', 'skills');
+  const out: Command[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    try {
+      const fm = frontmatter(fs.readFileSync(path.join(dir, e.name, 'SKILL.md'), 'utf8'));
+      out.push({ name: fm.name || e.name, description: fm.description || '', kind: 'skill' });
+    } catch {}
+  }
+  return out;
+}
+
+function readCommands(baseDir: string): Command[] {
+  const dir = path.join(baseDir, '.claude', 'commands');
+  const out: Command[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.endsWith('.md')) continue;
+    let description = '';
+    try {
+      const text = fs.readFileSync(path.join(dir, e.name), 'utf8');
+      const fm = frontmatter(text);
+      description =
+        fm.description ||
+        (text.replace(/^---\s*\n[\s\S]*?\n---\s*\n/, '').split('\n').find((l) => l.trim()) || '').slice(0, 120);
+    } catch {}
+    out.push({ name: e.name.replace(/\.md$/, ''), description, kind: 'command' });
+  }
+  return out;
+}
+
+chatRouter.get('/chat/:id/commands', (req, res) => {
+  const meta = getMeta(req.params.id);
+  if (!meta || meta.kind !== 'chat') {
+    res.status(404).json({ error: 'no such chat session' });
+    return;
+  }
+  const home = os.homedir();
+  // project entries override user entries of the same name
+  const byName = new Map<string, Command>();
+  for (const c of [...readSkills(home), ...readCommands(home), ...readSkills(meta.cwd), ...readCommands(meta.cwd)]) {
+    byName.set(c.name, c);
+  }
+  const commands = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  res.json({ commands });
+});
 
 chatRouter.get('/chat/:id/events', (req, res) => {
   const chat = getChat(req.params.id);

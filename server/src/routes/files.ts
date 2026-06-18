@@ -74,6 +74,45 @@ filesRouter.get('/files/content', (req, res) => {
   res.json({ binary: false, size: buf.length, content, truncated });
 });
 
+// Raw bytes for inline previews (images, and PDFs the user clicks to view).
+// Restricted to known media types within the project (resolveWithin enforces
+// the boundary). Served inline so the browser renders rather than downloads.
+const PREVIEW_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+  '.avif': 'image/avif',
+  '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf',
+};
+
+filesRouter.get('/files/raw', (req, res) => {
+  const cwd = validateCwd(String(req.query.cwd || ''));
+  const rel = String(req.query.path || '');
+  const full = cwd && rel ? safeJoin(cwd, rel) : null;
+  if (!full) {
+    res.status(400).json({ error: 'invalid path' });
+    return;
+  }
+  const mime = PREVIEW_MIME[path.extname(full).toLowerCase()];
+  if (!mime) {
+    res.status(415).json({ error: 'not previewable' });
+    return;
+  }
+  if (!fs.existsSync(full)) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.type(mime);
+  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  fs.createReadStream(full).pipe(res);
+});
+
 filesRouter.put('/files/content', (req, res) => {
   const cwd = validateCwd(String(req.body?.cwd || ''));
   const rel = String(req.body?.path || '');

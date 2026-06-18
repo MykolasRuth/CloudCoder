@@ -55,7 +55,11 @@ export default function ChatView({ session, active }: { session: SessionMeta; ac
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<string[]>([]); // data URLs of attached images
   const [sendError, setSendError] = useState('');
+  const [commands, setCommands] = useState<{ name: string; description: string; kind: string }[]>([]);
+  const [menuIdx, setMenuIdx] = useState(0);
+  const [dismissAt, setDismissAt] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const lastSeq = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickBottom = useRef(true);
@@ -172,6 +176,37 @@ export default function ChatView({ session, active }: { session: SessionMeta; ac
     return () => cancelAnimationFrame(raf);
   }, [active]);
 
+  // load available slash commands (skills + custom commands) for this session
+  useEffect(() => {
+    api
+      .chatCommands(session.id)
+      .then((r) => setCommands(r.commands))
+      .catch(() => {});
+  }, [session.id]);
+
+  // slash-command menu: open when the input is a bare "/query" with no space yet
+  const slash = /^\/(\S*)$/.exec(input);
+  const slashQuery = slash ? slash[1].toLowerCase() : null;
+  const matches =
+    slashQuery === null
+      ? []
+      : commands
+          .filter((c) => c.name.toLowerCase().includes(slashQuery))
+          .sort((a, b) => {
+            const aw = a.name.toLowerCase().startsWith(slashQuery) ? 0 : 1;
+            const bw = b.name.toLowerCase().startsWith(slashQuery) ? 0 : 1;
+            return aw - bw || a.name.localeCompare(b.name);
+          });
+  const menuOpen = slashQuery !== null && matches.length > 0 && !running && input !== dismissAt;
+  const menuIndex = Math.max(0, Math.min(menuIdx, matches.length - 1));
+
+  const pickCommand = (name: string) => {
+    setInput('/' + name + ' ');
+    setMenuIdx(0);
+    setDismissAt(null);
+    taRef.current?.focus();
+  };
+
   const addFiles = async (files: FileList | File[] | null) => {
     if (!files) return;
     const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'));
@@ -243,7 +278,7 @@ export default function ChatView({ session, active }: { session: SessionMeta; ac
                 <Markdown text={item.text} />
               </div>
             );
-          if (item.kind === 'tool') return <ToolCard key={item.toolId + i} tool={item} />;
+          if (item.kind === 'tool') return <ToolCard key={item.toolId + i} tool={item} cwd={session.cwd} />;
           if (item.kind === 'changes') return <ChangesCard key={'ch' + i} cwd={session.cwd} files={item.files} />;
           if (item.kind === 'result')
             return (
@@ -278,6 +313,27 @@ export default function ChatView({ session, active }: { session: SessionMeta; ac
         className="shrink-0 border-t border-linesoft bg-raised p-2.5"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 10px)' }}
       >
+        {menuOpen && (
+          <div className="mb-2 max-h-56 overflow-y-auto rounded-xl border border-line bg-card">
+            {matches.map((c, k) => (
+              <button
+                key={c.name}
+                className={
+                  'flex w-full flex-col items-start gap-0.5 border-b border-linesoft px-3 py-2 text-left last:border-0 ' +
+                  (k === menuIndex ? 'bg-press' : '')
+                }
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pickCommand(c.name)}
+              >
+                <span className="mono text-[12.5px] text-ink">
+                  /{c.name}
+                  <span className="ml-1.5 text-[9px] uppercase tracking-wider text-faint">{c.kind}</span>
+                </span>
+                {c.description && <span className="w-full truncate text-[11px] text-faint">{c.description}</span>}
+              </button>
+            ))}
+          </div>
+        )}
         {pending.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {pending.map((src, k) => (
@@ -314,6 +370,7 @@ export default function ChatView({ session, active }: { session: SessionMeta; ac
             <Icon name="image" size={18} />
           </button>
           <textarea
+            ref={taRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onPaste={(e) => {
@@ -339,6 +396,28 @@ export default function ChatView({ session, active }: { session: SessionMeta; ac
                 }, 300);
             }}
             onKeyDown={(e) => {
+              if (menuOpen) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setMenuIdx(Math.min(menuIndex + 1, matches.length - 1));
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setMenuIdx(Math.max(menuIndex - 1, 0));
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  pickCommand(matches[menuIndex].name);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setDismissAt(input);
+                  return;
+                }
+              }
               if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) {
                 e.preventDefault();
                 send();

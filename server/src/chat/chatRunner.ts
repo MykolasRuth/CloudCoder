@@ -172,6 +172,7 @@ export class ChatSession {
       '--disallowedTools',
       'AskUserQuestion',
     ];
+    if (meta.model && meta.model !== 'default') args.push('--model', meta.model);
     if (meta.claudeSessionId) args.push('--resume', meta.claudeSessionId);
 
     const p = spawn(CLAUDE_PATH, args, { cwd: meta.cwd });

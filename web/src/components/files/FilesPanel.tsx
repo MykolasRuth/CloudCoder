@@ -3,6 +3,10 @@ import { api } from '../../lib/api';
 import Panel from '../Panel';
 import Icon from '../Icon';
 
+const PDF_RE = /\.pdf$/i;
+const IMG_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
+const PREVIEW_RE = /\.(pdf|png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
+
 export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () => void }) {
   const [files, setFiles] = useState<string[]>([]);
   const [filter, setFilter] = useState('');
@@ -13,6 +17,7 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
+  const [pdfFull, setPdfFull] = useState(false);
 
   useEffect(() => {
     api.fileTree(cwd).then((r) => setFiles(r.files)).catch(() => setFiles([]));
@@ -24,6 +29,9 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
     setBinary(false);
     setEditing(false);
     setSaveMsg('');
+    setPdfFull(false);
+    // PDFs/images are rendered straight from the raw endpoint, not read as text
+    if (PREVIEW_RE.test(sel)) return;
     api
       .fileRead(cwd, sel)
       .then((r) => {
@@ -35,13 +43,18 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
   }, [cwd, sel]);
 
   if (sel) {
+    const isPdf = PDF_RE.test(sel);
+    const isImage = IMG_RE.test(sel);
+    const isMedia = isPdf || isImage;
+    const rawUrl = api.fileRawUrl(cwd, sel);
     return (
+      <>
       <Panel
         title={sel.split('/').pop() || sel}
         icon="file"
         onClose={() => setSel(null)}
         actions={
-          !binary && !truncated && content != null ? (
+          !isMedia && !binary && !truncated && content != null ? (
             editing ? (
               <button
                 className="rounded-full bg-coral px-3 py-1 text-[11px] font-semibold text-bg"
@@ -78,9 +91,35 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
             <Icon name="check" size={12} /> {saveMsg}
           </div>
         )}
-        {content == null && <div className="p-5 text-[13px] text-faint">loading…</div>}
-        {binary && <div className="p-5 text-[13px] text-faint">binary file</div>}
-        {!binary && content != null && !editing && (
+        {isMedia ? (
+          <div className="flex h-full flex-col">
+            <div className="flex shrink-0 items-center justify-end px-4 py-1.5">
+              {isPdf ? (
+                <button
+                  className="text-[11px] font-medium text-coral"
+                  onClick={() => setPdfFull(true)}
+                >
+                  Fullscreen ⤢
+                </button>
+              ) : (
+                <a href={rawUrl} target="_blank" rel="noreferrer" className="text-[11px] font-medium text-coral">
+                  Open ↗
+                </a>
+              )}
+            </div>
+            {isPdf ? (
+              <iframe title={sel} src={rawUrl} className="min-h-0 w-full flex-1 border-0 bg-white" />
+            ) : (
+              <div className="min-h-0 flex-1 overflow-auto p-3">
+                <img src={rawUrl} className="mx-auto max-w-full rounded-lg" />
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {content == null && <div className="p-5 text-[13px] text-faint">loading…</div>}
+            {binary && <div className="p-5 text-[13px] text-faint">binary file</div>}
+            {!binary && content != null && !editing && (
           <pre className="mono overflow-x-auto whitespace-pre-wrap break-all p-4 text-[11.5px] leading-relaxed text-dim">
             {content}
             {truncated && '\n…truncated'}
@@ -96,7 +135,23 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
             className="mono h-full w-full resize-none bg-bg p-4 text-[11.5px] leading-relaxed text-ink outline-none"
           />
         )}
+          </>
+        )}
       </Panel>
+      {pdfFull && isPdf && (
+        <div className="fixed inset-0 z-50 bg-black">
+          <iframe title={sel} src={rawUrl} className="h-full w-full border-0 bg-white" />
+          <button
+            onClick={() => setPdfFull(false)}
+            style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
+            className="absolute right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-lg active:bg-black/85"
+            aria-label="Exit fullscreen"
+          >
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+      )}
+      </>
     );
   }
 

@@ -12,6 +12,7 @@ export interface SessionMeta {
   title: string;
   program?: 'claude' | 'shell';
   permissionMode?: string;
+  model?: string;
   claudeSessionId?: string;
   createdAt: number;
   updatedAt?: number;
@@ -71,6 +72,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title }),
     }).then((r) => j(r)),
+  setSessionMode: (id: string, permissionMode: string) =>
+    fetch('/_cc/api/sessions/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ permissionMode }),
+    }).then((r) => j<SessionMeta>(r)),
+  setSessionModel: (id: string, model: string) =>
+    fetch('/_cc/api/sessions/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    }).then((r) => j<SessionMeta>(r)),
   chatSend: (id: string, text: string, images?: string[]) =>
     fetch(`/_cc/api/chat/${id}/message`, {
       method: 'POST',
@@ -78,6 +91,10 @@ export const api = {
       body: JSON.stringify({ text, images }),
     }).then((r) => j(r)),
   chatStop: (id: string) => fetch(`/_cc/api/chat/${id}/stop`, { method: 'POST' }).then((r) => j(r)),
+  chatCommands: (id: string) =>
+    fetch(`/_cc/api/chat/${id}/commands`).then((r) =>
+      j<{ commands: { name: string; description: string; kind: 'skill' | 'command' }[] }>(r),
+    ),
   gitStatus: (cwd: string) =>
     fetch('/_cc/api/git/status?cwd=' + encodeURIComponent(cwd)).then((r) =>
       j<{ isRepo: boolean; branch?: string; ahead?: number; behind?: number; files?: { path: string; status: string; staged: boolean }[]; error?: string }>(r),
@@ -103,6 +120,8 @@ export const api = {
     fetch(
       '/_cc/api/files/content?cwd=' + encodeURIComponent(cwd) + '&path=' + encodeURIComponent(filePath),
     ).then((r) => j<{ binary: boolean; size: number; content?: string; truncated?: boolean }>(r)),
+  fileRawUrl: (cwd: string, filePath: string) =>
+    '/_cc/api/files/raw?cwd=' + encodeURIComponent(cwd) + '&path=' + encodeURIComponent(filePath),
   fileWrite: (cwd: string, filePath: string, content: string) =>
     fetch('/_cc/api/files/content', {
       method: 'PUT',

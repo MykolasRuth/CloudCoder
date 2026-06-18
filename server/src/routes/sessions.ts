@@ -13,6 +13,7 @@ import {
   SessionMeta,
   PERMISSION_MODES,
   DEFAULT_PERMISSION_MODE,
+  MODELS,
 } from '../pty/registry.js';
 import { getChat, dropChat } from '../chat/chatRunner.js';
 import { git } from '../git.js';
@@ -76,7 +77,7 @@ sessionsRouter.get('/sessions', (_req, res) => {
 const SCRATCH_DIR = path.join(PROJECTS_ROOT, '_scratch');
 
 sessionsRouter.post('/sessions', (req, res) => {
-  const { kind, cwd, title, program, permissionMode, newProject, scratch } = req.body || {};
+  const { kind, cwd, title, program, permissionMode, model, newProject, scratch } = req.body || {};
 
   // three targets: an existing project, a brand-new project folder, or a
   // projectless scratch workspace under _scratch/<slug>
@@ -122,6 +123,7 @@ sessionsRouter.post('/sessions', (req, res) => {
       permissionMode: (PERMISSION_MODES as readonly string[]).includes(permissionMode)
         ? permissionMode
         : DEFAULT_PERMISSION_MODE,
+      model: (MODELS as readonly string[]).includes(model) ? model : undefined,
       createdAt: Date.now(),
       status: 'running',
     };
@@ -147,6 +149,9 @@ sessionsRouter.patch('/sessions/:id', (req, res) => {
     (PERMISSION_MODES as readonly string[]).includes(req.body?.permissionMode)
   ) {
     meta.permissionMode = req.body.permissionMode;
+  }
+  if (meta.kind === 'chat' && (MODELS as readonly string[]).includes(req.body?.model)) {
+    meta.model = req.body.model;
   }
   sessions.save();
   res.json(publicMeta(meta));

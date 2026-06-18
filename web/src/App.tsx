@@ -90,6 +90,24 @@ export default function App() {
     setPanel(tool);
   };
 
+  // permission mode / model apply to the next turn; update optimistically
+  const changeMode = async (id: string, mode: string) => {
+    setSessions((ss) => ss.map((s) => (s.id === id ? { ...s, permissionMode: mode } : s)));
+    try {
+      await api.setSessionMode(id, mode);
+    } catch {
+      refresh();
+    }
+  };
+  const changeModel = async (id: string, model: string) => {
+    setSessions((ss) => ss.map((s) => (s.id === id ? { ...s, model } : s)));
+    try {
+      await api.setSessionModel(id, model);
+    } catch {
+      refresh();
+    }
+  };
+
   if (pinRequired) {
     return (
       <div style={{ top: offsetTop, height }} className="fixed inset-x-0 flex flex-col items-center justify-center gap-4 p-6">
@@ -146,13 +164,42 @@ export default function App() {
             <div className="mono truncate text-[9.5px] text-faint">
               {projectName(active.cwd)}
               {active.kind === 'chat'
-                ? ` · ${active.permissionMode}`
+                ? ''
                 : active.program === 'shell'
                   ? ' · powershell'
                   : ' · claude code'}
             </div>
           </div>
           <div className="flex items-center gap-0.5">
+            {active.kind === 'chat' && (
+              <>
+                <select
+                  value={active.model || 'default'}
+                  onChange={(e) => changeModel(active.id, e.target.value)}
+                  className="mono mr-1 rounded-md border border-line bg-card px-1.5 py-1 text-[10.5px] text-dim outline-none focus:border-coral/60"
+                  aria-label="Model"
+                >
+                  <option value="default">Default model</option>
+                  <option value="claude-opus-4-8">Opus 4.8 · 1M</option>
+                  <option value="claude-opus-4-7">Opus 4.7 · 1M</option>
+                  <option value="claude-opus-4-6">Opus 4.6 · 1M</option>
+                  <option value="claude-sonnet-4-6">Sonnet 4.6 · 1M</option>
+                  <option value="claude-haiku-4-5">Haiku 4.5 · 200K</option>
+                  <option value="claude-fable-5">Fable 5 · 1M</option>
+                </select>
+                <select
+                  value={active.permissionMode || 'acceptEdits'}
+                  onChange={(e) => changeMode(active.id, e.target.value)}
+                  className="mono mr-1 rounded-md border border-line bg-card px-1.5 py-1 text-[10.5px] text-dim outline-none focus:border-coral/60"
+                  aria-label="Permission mode"
+                >
+                  <option value="plan">Plan</option>
+                  <option value="acceptEdits">Auto</option>
+                  <option value="bypassPermissions">Bypass</option>
+                  <option value="default">Default</option>
+                </select>
+              </>
+            )}
             {(
               [
                 ['git', 'branch'],
