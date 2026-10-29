@@ -1,8 +1,8 @@
 # CloudCoder
 
 Claude Code on your homelab, from your phone. A self-hosted PWA you open on
-your iPhone over Tailscale to run real Claude Code sessions on this Windows
-machine — terminal or chat, with live dev-server previews, git review, a file
+your iPhone over Tailscale to run real Claude Code sessions on your homelab
+machine (Windows or macOS) — terminal or chat, with live dev-server previews, git review, a file
 browser, and push notifications when Claude finishes or needs you.
 
 ## Quick start
@@ -21,7 +21,8 @@ Server: `http://127.0.0.1:4060` (loopback only; reach it through
 open `https://your-pc.your-tailnet.ts.net`, Share → **Add to Home
 Screen**, launch from the icon, and enable push in Settings ⚙︎.
 
-Auto-start on boot: `.\scripts\start.ps1 -Install` (registers a Scheduled Task).
+Auto-start on boot: `.\scripts\start.ps1 -Install` on Windows (registers a Scheduled Task), or
+`./scripts/start.sh --install` on macOS (installs a LaunchAgent).
 
 ## What's inside
 
