@@ -11,9 +11,23 @@ export type ChatEvent =
   | { type: 'assistant_text'; text: string }
   | { type: 'tool_start'; toolId: string; name: string; label: string; input: string }
   | { type: 'tool_done'; toolId: string; output: string; isError: boolean }
-  | { type: 'result'; ok: boolean; cost: number; turns: number; durationMs: number; text: string }
+  | { type: 'result'; ok: boolean; cost: number; turns: number; durationMs: number; text: string; contextTokens?: number }
   | { type: 'status'; running: boolean }
+  | { type: 'compact'; summary: string }
   | { type: 'error'; message: string };
+
+// Context size = fresh input + cached prompt reused. This is what fills the
+// model's context window, so it's the right signal for "time to compact".
+export function contextTokensFromLine(line: string): number {
+  try {
+    const j = JSON.parse(line);
+    const u = j?.message?.usage || j?.usage;
+    if (!u) return 0;
+    return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+  } catch {
+    return 0;
+  }
+}
 
 const INPUT_CAP = 8000;
 const OUTPUT_CAP = 2000;

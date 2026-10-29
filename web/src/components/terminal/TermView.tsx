@@ -36,6 +36,71 @@ export default function TermView({ session, active }: { session: SessionMeta; ac
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'input', d: applyCtrlLatch(d) }));
   };
 
+  // Touch-drag to scroll the scrollback. xterm's text layer covers its own
+  // scroll viewport, so on mobile a finger drag never scrolls it — we translate
+  // the drag into scrollLines() ourselves. Drag down = go back through history.
+  const touchY = useRef<number | null>(null);
+  const touchAcc = useRef(0);
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchY.current = e.touches[0].clientY;
+      touchAcc.current = 0;
+    } else {
+      touchY.current = null;
+    }
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const term = termRef.current;
+    const el = containerRef.current;
+    if (touchY.current == null || !term || !el || e.touches.length !== 1) return;
+    const y = e.touches[0].clientY;
+    const dy = y - touchY.current; // finger down → dy > 0 → go back in history
+    touchY.current = y;
+
+    if (term.buffer.active.type === 'alternate') {
+      // A full-screen app (Claude Code, vim, less) owns the screen — there's no
+      // terminal scrollback. Forward the drag as wheel events so the app scrolls
+      // its own view (xterm encodes them in whatever mouse mode the app enabled).
+      const vp = (el.querySelector('.xterm-viewport') as HTMLElement) || el;
+      vp.dispatchEvent(new WheelEvent('wheel', { deltaY: -dy, deltaMode: 0, bubbles: true, cancelable: true }));
+      return;
+    }
+
+    // Normal shell output — drive xterm's own scrollback.
+    touchAcc.current += -dy;
+    const rowPx = el.clientHeight / Math.max(1, term.rows);
+    const lines = Math.trunc(touchAcc.current / rowPx);
+    if (lines !== 0) {
+      term.scrollLines(lines);
+      touchAcc.current -= lines * rowPx;
+    }
+  };
+  const onTouchEnd = () => {
+    touchY.current = null;
+  };
+
+  // Mobile browsers don't deliver an OS paste gesture to xterm's hidden
+  // textarea, so paste explicitly: read the clipboard, falling back to a
+  // prompt the user can long-press-paste into when the API is blocked.
+  const pasteFromClipboard = async () => {
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      text = '';
+    }
+    if (!text) {
+      const typed = window.prompt('Paste here, then OK:');
+      if (typed == null) {
+        termRef.current?.focus();
+        return;
+      }
+      text = typed;
+    }
+    if (text) sendInput(text);
+    termRef.current?.focus();
+  };
+
   const sendResize = () => {
     const term = termRef.current;
     const ws = wsRef.current;
@@ -183,7 +248,13 @@ export default function TermView({ session, active }: { session: SessionMeta; ac
 
   return (
     <div className="flex h-full flex-col">
-      <div className="term-wrap relative min-h-0 flex-1" ref={containerRef}>
+      <div
+        className="term-wrap relative min-h-0 flex-1"
+        ref={containerRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         {conn !== 'open' && conn !== 'exited' && (
           <div className="mono absolute right-2.5 top-2 z-10 flex items-center gap-1.5 rounded-full border border-amb/30 bg-amb/12 px-2.5 py-1 text-[10px] text-amb">
             <span className="spin h-2.5 w-2.5 rounded-full border border-amb border-t-transparent" />
@@ -202,6 +273,7 @@ export default function TermView({ session, active }: { session: SessionMeta; ac
           ctrlLatch.current = !ctrlLatch.current;
           setCtrlOn(ctrlLatch.current);
         }}
+        onPaste={pasteFromClipboard}
         onKey={(seq) => {
           sendInput(seq);
           termRef.current?.focus();

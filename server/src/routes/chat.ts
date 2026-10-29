@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getChat } from '../chat/chatRunner.js';
+import { summarizeForSpeech } from '../chat/summarize.js';
+import { synthesizeWav } from '../chat/tts.js';
 import { getMeta } from '../pty/registry.js';
 import { DATA_DIR } from '../config.js';
 
@@ -139,6 +141,29 @@ chatRouter.get('/chat/:id/upload/:name', (req, res) => {
   res.sendFile(file);
 });
 
+chatRouter.post('/chat/:id/text-file', (req, res) => {
+  const meta = getMeta(req.params.id);
+  if (!meta || meta.kind !== 'chat') {
+    res.status(404).json({ error: 'no such chat session' });
+    return;
+  }
+  const text = String(req.body?.text || '');
+  if (!text) {
+    res.status(400).json({ error: 'empty text' });
+    return;
+  }
+  const dir = path.join(UPLOADS_DIR, req.params.id);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const name = `paste-${Date.now()}.txt`;
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, text, 'utf8');
+    res.json({ ok: true, path: file, name });
+  } catch (e: any) {
+    res.status(500).json({ error: 'failed to save file: ' + e.message });
+  }
+});
+
 chatRouter.post('/chat/:id/message', (req, res) => {
   const chat = getChat(req.params.id);
   if (!chat) {
@@ -156,6 +181,32 @@ chatRouter.post('/chat/:id/message', (req, res) => {
   else res.status(409).json({ error: r.error });
 });
 
+// Condense a finished reply to a one-line summary, render it to speech audio,
+// and return the WAV. The client plays it as media so it routes to whatever the
+// device is connected to (CarPlay, Bluetooth, headphones). The summary text is
+// returned in a header so the client can show/log it without parsing the audio.
+chatRouter.post('/chat/:id/voice', async (req, res) => {
+  const meta = getMeta(req.params.id);
+  if (!meta || meta.kind !== 'chat') {
+    res.status(404).json({ error: 'no such chat session' });
+    return;
+  }
+  const text = String(req.body?.text || '').trim();
+  if (!text) {
+    res.status(400).json({ error: 'empty text' });
+    return;
+  }
+  try {
+    const summary = await summarizeForSpeech(text);
+    const wav = await synthesizeWav(summary);
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('X-Summary', encodeURIComponent(summary));
+    res.send(wav);
+  } catch (e: any) {
+    res.status(500).json({ error: 'voice failed: ' + (e?.message || String(e)) });
+  }
+});
+
 chatRouter.post('/chat/:id/stop', (req, res) => {
   const chat = getChat(req.params.id);
   if (!chat) {
@@ -164,4 +215,26 @@ chatRouter.post('/chat/:id/stop', (req, res) => {
   }
   chat.stop();
   res.json({ ok: true });
+});
+
+chatRouter.post('/chat/:id/compact', (req, res) => {
+  const chat = getChat(req.params.id);
+  if (!chat) {
+    res.status(404).json({ error: 'no such chat session' });
+    return;
+  }
+  const r = chat.compact();
+  if (r.ok) res.json({ ok: true });
+  else res.status(409).json({ error: r.error });
+});
+
+chatRouter.post('/chat/:id/clear', (req, res) => {
+  const chat = getChat(req.params.id);
+  if (!chat) {
+    res.status(404).json({ error: 'no such chat session' });
+    return;
+  }
+  const r = chat.clear();
+  if (r.ok) res.json({ ok: true });
+  else res.status(409).json({ error: r.error });
 });

@@ -1,58 +1,71 @@
 # Exposing CloudCoder over Tailscale HTTPS
 
-iOS needs a **secure context** (HTTPS) for the service worker and push
-notifications. `tailscale serve` gives the app automatic TLS at your
-machine's tailnet name.
+CloudCoder listens on `127.0.0.1:4060` only, so nothing on the home LAN can
+reach it. `tailscale serve` is the way in: it answers only devices on your
+tailnet and gives the app automatic TLS at the Mac mini's tailnet name. iOS
+needs that HTTPS origin (a **secure context**) for the service worker and
+push notifications.
 
 ## One-time setup
 
-> **Important:** the Tailscale connection on this machine is owned by the
-> interactive `mykol` user session — running serve commands from another
-> account (e.g. an SSH session as `devserver`) returns
-> `401 Unauthorized: Tailscale already in use`. Run these from a terminal
-> inside the `mykol` desktop session, **or** first allow your user as
-> operator (run once, as `mykol`, in an elevated terminal):
->
-> ```
-> tailscale set --operator=devserver
-> ```
-
-Then:
+On the Mac mini (`ssh your-mac`):
 
 ```
-tailscale serve --bg 4060
+tailscale serve --bg --https=443 http://127.0.0.1:4060
 ```
 
 That's it. The app is now at:
 
-    https://your-pc.your-tailnet.ts.net
+    https://your-mac.your-tailnet.ts.net
 
 `--bg` makes the config persistent — it survives reboots; you don't need to
 re-run it.
+
+If the command prints a `login.tailscale.com` link and waits, HTTPS
+certificates aren't enabled for the tailnet yet: open the link, enable them,
+then run the command again.
+
+Port 8443 on this machine is Agent Deck's
+(`https://your-mac.your-tailnet.ts.net:8443`), so leave that mapping alone.
+
+## Only your Tailscale login (optional)
+
+`tailscale serve` adds a `Tailscale-User-Login` header to every request it
+proxies. With `CLOUDCODER_ALLOWED_LOGINS` set (comma-separated), CloudCoder
+refuses any request or websocket without one of those logins, including
+requests that skip Serve and hit `127.0.0.1:4060` directly. Reinstall the
+LaunchAgent with it set so it sticks:
+
+```
+CLOUDCODER_ALLOWED_LOGINS=you@github ./scripts/start.sh --install
+```
+
+`tailscale whois <device-tailnet-ip>` shows a device's login under `User`.
 
 ## Check / remove
 
 ```
 tailscale serve status
-tailscale serve reset     # remove all serve config
+tailscale serve --https=443 off   # remove just CloudCoder's mapping
+tailscale serve reset             # remove ALL serve config, Agent Deck's too
 ```
 
-## Fallback without HTTPS
+## Listening on the LAN again (not recommended)
 
-The app also listens on plain HTTP at:
-
-    http://100.64.0.10:4060
-
-Everything works there **except** the service worker, Add-to-Home-Screen
-standalone mode, and push notifications (those need the HTTPS origin).
+`CLOUDCODER_HOST=0.0.0.0` makes the server listen on every interface over
+plain HTTP. Anyone on the network can then open a Claude Code terminal on
+this machine unless `CLOUDCODER_PIN` is set. Without HTTPS the service
+worker, Add-to-Home-Screen standalone mode and push notifications don't work
+either.
 
 ## Giving a dev server its own origin (rarely needed)
 
 If some previewed app misbehaves behind the built-in port proxy, serve it on
-an extra HTTPS port (serve supports 443/8443/10000):
+the spare HTTPS port. Serve supports 443/8443/10000, and 443 and 8443 are
+taken here:
 
 ```
-tailscale serve --bg --https=8443 5173
+tailscale serve --bg --https=10000 http://127.0.0.1:5173
 ```
 
-→ `https://your-pc.your-tailnet.ts.net:8443`
+→ `https://your-mac.your-tailnet.ts.net:10000`

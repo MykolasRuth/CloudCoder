@@ -17,10 +17,12 @@ const KEYS: [string, string][] = [
 export default function KeyBar({
   onKey,
   onCtrl,
+  onPaste,
   ctrlOn,
 }: {
   onKey: (seq: string) => void;
   onCtrl: () => void;
+  onPaste: () => void;
   ctrlOn: boolean;
 }) {
   return (
@@ -40,6 +42,13 @@ export default function KeyBar({
         onClick={onCtrl}
       >
         ctrl
+      </button>
+      <button
+        className="mono shrink-0 rounded-lg border border-line bg-card px-2.5 py-1.5 text-[11px] font-medium text-dim active:bg-press"
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={onPaste}
+      >
+        paste
       </button>
       {KEYS.map(([label, seq]) => (
         <button

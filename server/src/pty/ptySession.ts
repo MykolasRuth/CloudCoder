@@ -80,15 +80,17 @@ export class PtySession {
     this.id = id;
     this.cwd = cwd;
     this.program = program;
-    const file = program === 'claude' ? CLAUDE_PATH : 'powershell.exe';
-    const args = program === 'claude' ? [] : ['-NoLogo'];
+    const isWin = process.platform === 'win32';
+    const shell = isWin ? 'powershell.exe' : process.env.SHELL || '/bin/zsh';
+    const file = program === 'claude' ? CLAUDE_PATH : shell;
+    const args = program === 'claude' ? [] : isWin ? ['-NoLogo'] : ['-l'];
     this.proc = pty.spawn(file, args, {
       name: 'xterm-256color',
       cols: this.cols,
       rows: this.rows,
       cwd,
       env: { ...process.env, CLAUDE_CODE_DISABLE_TERMINAL_TITLE: '1' },
-      useConpty: true,
+      useConpty: isWin,
     });
     this.proc.onData((d: string) => {
       this.push(d);

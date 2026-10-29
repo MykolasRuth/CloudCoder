@@ -13,7 +13,8 @@ npm run build          # builds web/dist
 npx tsx server/src/index.ts    # or: .\scripts\start.ps1
 ```
 
-Server: `http://0.0.0.0:4060`.
+Server: `http://127.0.0.1:4060` (loopback only; reach it through
+`tailscale serve`).
 
 **For the iPhone (one-time):** set up HTTPS via Tailscale — see
 [`scripts/tailscale-serve.md`](scripts/tailscale-serve.md) — then on the phone
@@ -57,6 +58,8 @@ npm run dev:web    # Vite dev server on :4061 (proxies /api, /ws to :4060)
 | Var | Default | |
 |---|---|---|
 | `CLOUDCODER_PORT` | `4060` | server port |
+| `CLOUDCODER_HOST` | `127.0.0.1` | listen address; `0.0.0.0` exposes it to the LAN |
+| `CLOUDCODER_ALLOWED_LOGINS` | *(unset)* | comma-separated Tailscale logins allowed through `tailscale serve`; unset = no identity check |
 | `CLOUDCODER_CLAUDE` | `C:/Users/devserver/.local/bin/claude.exe` | claude CLI path |
 | `CLOUDCODER_PROJECTS` | `C:/Users/devserver/Projects` | projects root (sessions/files/git are restricted to it) |
 | `CLOUDCODER_PIN` | *(unset)* | optional PIN gate; unset = open (Tailscale is the perimeter) |

@@ -13,12 +13,40 @@ export interface SessionMeta {
   program?: 'claude' | 'shell';
   permissionMode?: string;
   model?: string;
+  goal?: string;
   claudeSessionId?: string;
   createdAt: number;
   updatedAt?: number;
   status: 'running' | 'exited';
   busy?: boolean;
   attached?: boolean;
+}
+
+export interface WorkflowRun {
+  runId: string;
+  name: string;
+  status: string;
+  project: string;
+  startTime: number;
+  updatedAt: number;
+  durationMs: number;
+  agentCount: number;
+  totalTokens: number;
+  totalToolCalls: number;
+  phaseCount: number;
+  currentPhase: { index: number; title: string } | null;
+  summary: string;
+  hasError: boolean;
+}
+
+export interface WorkflowDetail extends WorkflowRun {
+  defaultModel: string;
+  phases: { title: string; detail?: string }[];
+  progress: { type: string; index?: number; title?: string; [k: string]: unknown }[];
+  logs: string[];
+  result: string;
+  scriptPath: string;
+  script: string;
 }
 
 export interface ProjectInfo {
@@ -84,17 +112,56 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
     }).then((r) => j<SessionMeta>(r)),
+  uploadTextFile: (id: string, text: string) =>
+    fetch(`/_cc/api/chat/${id}/text-file`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }).then((r) => j<{ ok: boolean; path: string; name: string }>(r)),
   chatSend: (id: string, text: string, images?: string[]) =>
     fetch(`/_cc/api/chat/${id}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, images }),
     }).then((r) => j(r)),
+  // Summarize a reply and return spoken audio (WAV) for it, plus the summary
+  // text. The audio is played as media so it follows the device output route.
+  chatVoice: async (id: string, text: string): Promise<{ audio: Blob; summary: string }> => {
+    const res = await fetch(`/_cc/api/chat/${id}/voice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      let msg = res.status + ' ' + res.statusText;
+      try {
+        const body = await res.json();
+        if (body.error) msg = body.error;
+      } catch {}
+      throw new Error(msg);
+    }
+    const audio = await res.blob();
+    let summary = '';
+    try {
+      summary = decodeURIComponent(res.headers.get('X-Summary') || '');
+    } catch {}
+    return { audio, summary };
+  },
   chatStop: (id: string) => fetch(`/_cc/api/chat/${id}/stop`, { method: 'POST' }).then((r) => j(r)),
+  chatClear: (id: string) => fetch(`/_cc/api/chat/${id}/clear`, { method: 'POST' }).then((r) => j(r)),
+  chatCompact: (id: string) => fetch(`/_cc/api/chat/${id}/compact`, { method: 'POST' }).then((r) => j(r)),
+  setSessionGoal: (id: string, goal: string) =>
+    fetch('/_cc/api/sessions/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal }),
+    }).then((r) => j<SessionMeta>(r)),
   chatCommands: (id: string) =>
     fetch(`/_cc/api/chat/${id}/commands`).then((r) =>
       j<{ commands: { name: string; description: string; kind: 'skill' | 'command' }[] }>(r),
     ),
+  workflows: () => fetch('/_cc/api/workflows').then((r) => j<{ runs: WorkflowRun[] }>(r)),
+  workflow: (runId: string) => fetch('/_cc/api/workflows/' + runId).then((r) => j<WorkflowDetail>(r)),
   gitStatus: (cwd: string) =>
     fetch('/_cc/api/git/status?cwd=' + encodeURIComponent(cwd)).then((r) =>
       j<{ isRepo: boolean; branch?: string; ahead?: number; behind?: number; files?: { path: string; status: string; staged: boolean }[]; error?: string }>(r),
@@ -122,6 +189,12 @@ export const api = {
     ).then((r) => j<{ binary: boolean; size: number; content?: string; truncated?: boolean }>(r)),
   fileRawUrl: (cwd: string, filePath: string) =>
     '/_cc/api/files/raw?cwd=' + encodeURIComponent(cwd) + '&path=' + encodeURIComponent(filePath),
+  fileDownloadUrl: (cwd: string, filePath: string) =>
+    '/_cc/api/files/raw?cwd=' +
+    encodeURIComponent(cwd) +
+    '&path=' +
+    encodeURIComponent(filePath) +
+    '&download=1',
   fileWrite: (cwd: string, filePath: string, content: string) =>
     fetch('/_cc/api/files/content', {
       method: 'PUT',

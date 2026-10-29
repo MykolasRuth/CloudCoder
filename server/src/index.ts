@@ -2,14 +2,15 @@ import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
-import { PORT, WEB_DIST, PIN } from './config.js';
-import { authMiddleware, handleLogin, isAuthed } from './auth.js';
+import { PORT, HOST, WEB_DIST, PIN, ALLOWED_LOGINS } from './config.js';
+import { authMiddleware, handleLogin, isAuthed, tailnetAllowed } from './auth.js';
 import { initPush } from './notify.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { chatRouter } from './routes/chat.js';
 import { gitRouter } from './routes/git.js';
 import { filesRouter } from './routes/files.js';
 import { pushRouter } from './routes/push.js';
+import { workflowsRouter } from './routes/workflows.js';
 import { handleTermUpgrade } from './ws/terminalSocket.js';
 import { previewSetCookieHandler, previewMiddleware, handlePreviewUpgrade } from './preview/proxy.js';
 import { killAllPtys } from './pty/registry.js';
@@ -32,6 +33,7 @@ app.use('/_cc/api', chatRouter);
 app.use('/_cc/api', gitRouter);
 app.use('/_cc/api', filesRouter);
 app.use('/_cc/api', pushRouter);
+app.use('/_cc/api', workflowsRouter);
 
 app.get('/p/:port', previewSetCookieHandler);
 app.use(previewMiddleware);
@@ -56,7 +58,7 @@ if (fs.existsSync(WEB_DIST)) {
 const server = http.createServer(app);
 
 server.on('upgrade', (req, socket, head) => {
-  if (PIN && !isAuthed(req)) {
+  if (!tailnetAllowed(req) || (PIN && !isAuthed(req))) {
     socket.destroy();
     return;
   }
@@ -67,8 +69,12 @@ server.on('upgrade', (req, socket, head) => {
   if (!handlePreviewUpgrade(req, socket, head)) socket.destroy();
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`CloudCoder server on http://0.0.0.0:${PORT}` + (PIN ? ' (PIN enabled)' : ''));
+server.listen(PORT, HOST, () => {
+  console.log(
+    `CloudCoder server on http://${HOST}:${PORT}` +
+      (PIN ? ' (PIN enabled)' : '') +
+      (ALLOWED_LOGINS.length ? ` for ${ALLOWED_LOGINS.join(', ')}` : ''),
+  );
 });
 
 // kill spawned children on shutdown so claude.exe/powershell don't orphan

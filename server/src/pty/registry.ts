@@ -15,7 +15,11 @@ export interface SessionMeta {
   program?: TermProgram;
   permissionMode?: string;
   model?: string;
+  goal?: string;
   claudeSessionId?: string;
+  // set by /compact: an in-depth summary of the prior (now-reset) conversation,
+  // injected into the next turn so a fresh Claude session keeps continuity
+  pendingSummary?: string;
   createdAt: number;
   updatedAt?: number;
   status: 'running' | 'exited';

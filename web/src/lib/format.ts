@@ -9,6 +9,14 @@ export function timeAgo(t: number): string {
   return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// Compact token count for the context gauge: 142684 -> "143k".
+export function fmtTokens(n: number): string {
+  if (!n) return '0';
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return Math.round(n / 1000) + 'k';
+  return (n / 1_000_000).toFixed(2) + 'M';
+}
+
 export function dayLabel(t: number): string {
   const d = new Date(t);
   const today = new Date();

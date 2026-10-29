@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ProjectInfo, SessionMeta } from './lib/api';
 import { useVisualViewport } from './lib/viewport';
-import { projectName, sessionDot } from './lib/format';
+import { projectName, sessionDot, fmtTokens } from './lib/format';
 import Icon from './components/Icon';
 import HomeTab from './components/tabs/HomeTab';
 import ProjectsTab from './components/tabs/ProjectsTab';
 import ProjectScreen from './components/tabs/ProjectScreen';
+import WorkflowsTab from './components/tabs/WorkflowsTab';
 import SettingsTab from './components/tabs/SettingsTab';
 import ComposeSheet from './components/ComposeSheet';
 import TermView from './components/terminal/TermView';
@@ -14,7 +15,7 @@ import GitPanel from './components/git/GitPanel';
 import FilesPanel from './components/files/FilesPanel';
 import PreviewPanel from './components/preview/PreviewPanel';
 
-type Tab = 'home' | 'projects' | 'settings';
+type Tab = 'home' | 'projects' | 'workflows' | 'settings';
 type Panel = null | 'preview' | 'git' | 'files';
 
 export default function App() {
@@ -31,6 +32,12 @@ export default function App() {
   const [pinRequired, setPinRequired] = useState(false);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
+  // live context-window size per chat session, reported up from ChatView
+  const [ctxBySession, setCtxBySession] = useState<Record<string, number>>({});
+  const reportCtx = useCallback(
+    (id: string, n: number) => setCtxBySession((m) => (m[id] === n ? m : { ...m, [id]: n })),
+    [],
+  );
 
   const refresh = useCallback(async () => {
     if (document.hidden) return;
@@ -163,11 +170,22 @@ export default function App() {
             <div className="truncate text-[14px] font-semibold tracking-tight text-ink">{active.title}</div>
             <div className="mono truncate text-[9.5px] text-faint">
               {projectName(active.cwd)}
-              {active.kind === 'chat'
-                ? ''
-                : active.program === 'shell'
-                  ? ' · powershell'
-                  : ' · claude code'}
+              {active.kind === 'chat' ? (
+                ctxBySession[active.id] > 0 ? (
+                  <>
+                    {' · '}
+                    <span className={ctxBySession[active.id] >= 120_000 ? 'text-amb' : 'text-dim'}>
+                      {fmtTokens(ctxBySession[active.id])} ctx
+                    </span>
+                  </>
+                ) : (
+                  ''
+                )
+              ) : active.program === 'shell' ? (
+                ' · powershell'
+              ) : (
+                ' · claude code'
+              )}
             </div>
           </div>
           <div className="flex items-center gap-0.5">
@@ -230,7 +248,11 @@ export default function App() {
             {s.kind === 'terminal' ? (
               <TermView session={s} active={s.id === activeId && !panel} />
             ) : (
-              <ChatView session={s} active={s.id === activeId} />
+              <ChatView
+                session={s}
+                active={s.id === activeId}
+                onContextTokens={(n) => reportCtx(s.id, n)}
+              />
             )}
           </div>
         ))}
@@ -261,6 +283,7 @@ export default function App() {
                 onTool={(t) => openTool(t, root + '\\' + project.name)}
               />
             )}
+            {tab === 'workflows' && <WorkflowsTab />}
             {tab === 'settings' && <SettingsTab />}
           </>
         )}
@@ -280,6 +303,7 @@ export default function App() {
             [
               ['home', 'home', 'Home'],
               ['projects', 'folder', 'Projects'],
+              ['workflows', 'workflow', 'Workflows'],
             ] as [Tab, string, string][]
           ).map(([key, icon, label]) => (
             <button

@@ -159,9 +159,10 @@ button {
   font-family: var(--font-mono);
 }
 
-/* terminal wrapper */
+/* terminal wrapper — we handle vertical drags ourselves (scrollback), so keep
+   the browser from hijacking them for pan/zoom */
 .term-wrap {
-  touch-action: manipulation;
+  touch-action: none;
 }
 .term-wrap .xterm {
   padding: 6px 0 0 8px;

@@ -153,6 +153,10 @@ sessionsRouter.patch('/sessions/:id', (req, res) => {
   if (meta.kind === 'chat' && (MODELS as readonly string[]).includes(req.body?.model)) {
     meta.model = req.body.model;
   }
+  if (meta.kind === 'chat' && typeof req.body?.goal === 'string') {
+    const g = req.body.goal.trim();
+    meta.goal = g || undefined; // empty string clears it
+  }
   sessions.save();
   res.json(publicMeta(meta));
 });

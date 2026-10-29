@@ -2,10 +2,29 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import Panel from '../Panel';
 import Icon from '../Icon';
+import PdfView from './PdfView';
 
 const PDF_RE = /\.pdf$/i;
 const IMG_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
 const PREVIEW_RE = /\.(pdf|png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
+
+// the download endpoint streams octet-stream (so iOS saves rather than previews);
+// re-attach a real MIME on the shared File so the iOS sheet shows e.g. "PDF Document"
+const SHARE_MIME: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  heic: 'image/heic',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  json: 'application/json',
+  csv: 'text/csv',
+  zip: 'application/zip',
+};
 
 export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () => void }) {
   const [files, setFiles] = useState<string[]>([]);
@@ -17,11 +36,52 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
-  const [pdfFull, setPdfFull] = useState(false);
+  const [sharing, setSharing] = useState<string | null>(null);
 
   useEffect(() => {
     api.fileTree(cwd).then((r) => setFiles(r.files)).catch(() => setFiles([]));
   }, [cwd]);
+
+  // Tapping the button hands iOS the file via the Web Share API so the native
+  // share sheet opens with "Save to Files", AirDrop, etc. We share ONLY the file
+  // — no title/text/url — so nothing but the document shows up in the sheet.
+  //
+  // Web Share with files only exists in a secure context (HTTPS). Over plain
+  // http:// it's unavailable, so we fall back to a forced download (the server
+  // sends octet-stream + attachment, which iOS Safari saves to Files). We never
+  // create a blob: URL, so a stray blob link can't leak into a manual share.
+  async function shareFile(f: string) {
+    if (sharing) return;
+    const name = f.split('/').pop() || f;
+    const url = api.fileDownloadUrl(cwd, f);
+    const nav = navigator as any;
+    if (typeof nav.canShare === 'function' && typeof nav.share === 'function') {
+      setSharing(f);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('fetch failed');
+        const blob = await res.blob();
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        const file = new File([blob], name, { type: SHARE_MIME[ext] || blob.type || 'application/octet-stream' });
+        if (nav.canShare({ files: [file] })) {
+          await nav.share({ files: [file] });
+          return;
+        }
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return; // user dismissed the share sheet
+        console.warn('share failed', e);
+      } finally {
+        setSharing(null);
+      }
+    }
+    // fallback: plain download (desktop, or http:// where Web Share is disabled)
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
 
   useEffect(() => {
     if (!sel) return;
@@ -29,7 +89,6 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
     setBinary(false);
     setEditing(false);
     setSaveMsg('');
-    setPdfFull(false);
     // PDFs/images are rendered straight from the raw endpoint, not read as text
     if (PREVIEW_RE.test(sel)) return;
     api
@@ -47,6 +106,9 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
     const isImage = IMG_RE.test(sel);
     const isMedia = isPdf || isImage;
     const rawUrl = api.fileRawUrl(cwd, sel);
+    // PDFs open straight into the full-screen reader (pinch-zoom + native scroll);
+    // the inline <iframe> only ever showed page one on iOS.
+    if (isPdf) return <PdfView url={rawUrl} onClose={() => setSel(null)} />;
     return (
       <>
       <Panel
@@ -94,26 +156,13 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
         {isMedia ? (
           <div className="flex h-full flex-col">
             <div className="flex shrink-0 items-center justify-end px-4 py-1.5">
-              {isPdf ? (
-                <button
-                  className="text-[11px] font-medium text-coral"
-                  onClick={() => setPdfFull(true)}
-                >
-                  Fullscreen ⤢
-                </button>
-              ) : (
-                <a href={rawUrl} target="_blank" rel="noreferrer" className="text-[11px] font-medium text-coral">
-                  Open ↗
-                </a>
-              )}
+              <a href={rawUrl} target="_blank" rel="noreferrer" className="text-[11px] font-medium text-coral">
+                Open ↗
+              </a>
             </div>
-            {isPdf ? (
-              <iframe title={sel} src={rawUrl} className="min-h-0 w-full flex-1 border-0 bg-white" />
-            ) : (
-              <div className="min-h-0 flex-1 overflow-auto p-3">
-                <img src={rawUrl} className="mx-auto max-w-full rounded-lg" />
-              </div>
-            )}
+            <div className="min-h-0 flex-1 overflow-auto p-3">
+              <img src={rawUrl} className="mx-auto max-w-full rounded-lg" />
+            </div>
           </div>
         ) : (
           <>
@@ -138,19 +187,6 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
           </>
         )}
       </Panel>
-      {pdfFull && isPdf && (
-        <div className="fixed inset-0 z-50 bg-black">
-          <iframe title={sel} src={rawUrl} className="h-full w-full border-0 bg-white" />
-          <button
-            onClick={() => setPdfFull(false)}
-            style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
-            className="absolute right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-lg active:bg-black/85"
-            aria-label="Exit fullscreen"
-          >
-            <Icon name="x" size={18} />
-          </button>
-        </div>
-      )}
       </>
     );
   }
@@ -174,15 +210,26 @@ export default function FilesPanel({ cwd, onClose }: { cwd: string; onClose: () 
       </div>
       <div className="mx-3 mt-3 mb-8 overflow-hidden rounded-2xl border border-line bg-raised">
         {shown.map((f) => (
-          <button
+          <div
             key={f}
-            className="flex w-full items-center gap-2.5 border-b border-linesoft/60 px-3.5 py-2.5 text-left last:border-b-0 active:bg-press"
-            onClick={() => setSel(f)}
+            className="flex items-center border-b border-linesoft/60 last:border-b-0"
           >
-            <Icon name="file" size={13} className="shrink-0 text-faint" />
-            <span className="mono min-w-0 flex-1 truncate text-[11.5px] text-dim">{f}</span>
-            <Icon name="chevronR" size={12} className="shrink-0 text-faint" />
-          </button>
+            <button
+              className="flex min-w-0 flex-1 items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-press"
+              onClick={() => setSel(f)}
+            >
+              <Icon name="file" size={13} className="shrink-0 text-faint" />
+              <span className="mono min-w-0 flex-1 truncate text-[11.5px] text-dim">{f}</span>
+            </button>
+            <button
+              onClick={() => shareFile(f)}
+              disabled={sharing === f}
+              aria-label={'Share ' + f}
+              className="flex h-11 w-11 shrink-0 items-center justify-center text-faint active:text-coral disabled:opacity-40"
+            >
+              <Icon name="share" size={16} />
+            </button>
+          </div>
         ))}
         {shown.length === 0 && <div className="px-4 py-4 text-[13px] text-faint">no files</div>}
       </div>

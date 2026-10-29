@@ -98,17 +98,39 @@ filesRouter.get('/files/raw', (req, res) => {
     res.status(400).json({ error: 'invalid path' });
     return;
   }
+  const download = req.query.download === '1' || req.query.download === 'true';
   const mime = PREVIEW_MIME[path.extname(full).toLowerCase()];
-  if (!mime) {
+  // inline previews are limited to known media types; downloads allow any file
+  if (!download && !mime) {
     res.status(415).json({ error: 'not previewable' });
     return;
   }
-  if (!fs.existsSync(full)) {
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(full);
+  } catch {
     res.status(404).json({ error: 'not found' });
     return;
   }
-  res.type(mime);
-  res.setHeader('Content-Disposition', 'inline');
+  if (!stat.isFile()) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  // octet-stream on download so iOS Safari saves the file instead of previewing
+  // it inline (it ignores attachment disposition for application/pdf otherwise)
+  res.type(download ? 'application/octet-stream' : (mime as string));
+  if (download) {
+    // attachment forces a save (to the iOS Files app) for any file type; the
+    // ascii filename is the fallback, filename* carries the real UTF-8 name
+    const base = path.basename(full);
+    const ascii = base.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(base)}`,
+    );
+  } else {
+    res.setHeader('Content-Disposition', 'inline');
+  }
   res.setHeader('Cache-Control', 'private, max-age=300');
   fs.createReadStream(full).pipe(res);
 });

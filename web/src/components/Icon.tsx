@@ -62,6 +62,39 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" />
     </>
   ),
+  download: (
+    <>
+      <path d="M12 4v11M8 11l4 4 4-4" />
+      <path d="M5 19.5h14" />
+    </>
+  ),
+  share: (
+    <>
+      <path d="M12 15V4M8.5 7.5L12 4l3.5 3.5" />
+      <path d="M7.5 11H6.5A1.5 1.5 0 0 0 5 12.5v6A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 17.5 11h-1" />
+    </>
+  ),
+  arrowUp: <path d="M12 19V5M6 11l6-6 6 6" />,
+  workflow: (
+    <>
+      <rect x="3.5" y="4" width="7" height="5" rx="1.3" />
+      <rect x="13.5" y="10" width="7" height="5" rx="1.3" />
+      <rect x="3.5" y="15.5" width="7" height="5" rx="1.3" />
+      <path d="M10.5 6.5h1.5a1.5 1.5 0 0 1 1.5 1.5v1.5M10.5 18h1.5a1.5 1.5 0 0 0 1.5-1.5V15" />
+    </>
+  ),
+  volume: (
+    <>
+      <path d="M4 9.5v5h3.2L12 18.5V5.5L7.2 9.5H4z" />
+      <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10" />
+    </>
+  ),
+  volumeOff: (
+    <>
+      <path d="M4 9.5v5h3.2L12 18.5V5.5L7.2 9.5H4z" />
+      <path d="M16 10l4 4M20 10l-4 4" />
+    </>
+  ),
 };
 
 export default function Icon({
