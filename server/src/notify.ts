@@ -20,7 +20,8 @@ export function initPush() {
     console.log('generated new VAPID keys');
   }
   webpush.setVapidDetails(
-    'mailto:you@example.com',
+    // Push services want a contact for whoever runs the server; set it with CLOUDCODER_PUSH_CONTACT.
+    process.env.CLOUDCODER_PUSH_CONTACT || 'mailto:you@example.com',
     config.data.vapidPublicKey,
     config.data.vapidPrivateKey,
   );

@@ -62,6 +62,7 @@ npm run dev:web    # Vite dev server on :4061 (proxies /api, /ws to :4060)
 | `CLOUDCODER_ALLOWED_LOGINS` | *(unset)* | comma-separated Tailscale logins allowed through `tailscale serve`; unset = no identity check |
 | `CLOUDCODER_CLAUDE` | `C:/Users/devserver/.local/bin/claude.exe` | claude CLI path |
 | `CLOUDCODER_PROJECTS` | `C:/Users/devserver/Projects` | projects root (sessions/files/git are restricted to it) |
+| `CLOUDCODER_PUSH_CONTACT` | `mailto:you@example.com` | contact sent to push services with notifications |
 | `CLOUDCODER_PIN` | *(unset)* | optional PIN gate; unset = open (Tailscale is the perimeter) |
 
 ## Architecture
