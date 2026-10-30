@@ -7,6 +7,8 @@ browser, and push notifications when Claude finishes or needs you.
 
 ## Quick start
 
+Copy `.env.example` to `.env` and fill in your PIN, allowed logins and push contact (`.env` is gitignored).
+
 ```powershell
 npm install
 npm run build          # builds web/dist

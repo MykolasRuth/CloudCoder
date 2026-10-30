@@ -1,3 +1,4 @@
+import './env.js'; // load .env before any setting below is read
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
